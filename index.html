@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="id" class="h-full">
-<head>
+
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#7C3AED">
+  <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TugasKU- Aplikasi Kelola Sekolah Premium</title>
@@ -1903,5 +1906,14 @@
       renderDashboard();
     }
   </script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js")
+      .catch(error => console.error("Service worker:", error));
+  });
+}
+</script>
 </body>
 </html>
