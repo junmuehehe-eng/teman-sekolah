@@ -1788,10 +1788,13 @@
       if (type === 'notifications') {
         document.getElementById('modalHeaderTitle').innerText = 'Pengingat & Notifikasi';
         display.innerHTML = `
-          <p>Fitur notifikasi pengingat otomatis akan aktif pada sore dan malam hari untuk mengingatkan susunan seragam dan buku yang harus dibawa esok hari.</p>
-          <div class="p-3 bg-purple-50 dark:bg-purple-900/30 rounded-2xl border border-purple-200 dark:border-purple-500/30">
+          <p class="mb-3">Aktifkan izin notifikasi pada perangkat ini agar Teman Sekolah dapat menerima pemberitahuan dari Firebase.</p>
+          <div class="p-3 mb-3 bg-purple-50 dark:bg-purple-900/30 rounded-2xl border border-purple-200 dark:border-purple-500/30">
             <strong>Status Suara Bell:</strong> ${isAudioEnabled ? 'Aktif 🔔' : 'Nonaktif 🔕'}
           </div>
+          <button id="enablePushButton" onclick="window.enableTemanSekolahPush && window.enableTemanSekolahPush()" class="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-cyan-500 text-white rounded-xl font-bold">Aktifkan Notifikasi HP</button>
+          <p id="pushStatus" class="text-xs mt-3 text-slate-500 dark:text-slate-400">Belum dihubungkan pada perangkat ini.</p>
+          <p class="text-xs mt-2 text-slate-500 dark:text-slate-400">Catatan: pendaftaran perangkat saja belum mengaktifkan pengiriman otomatis. Server pengirim notifikasi masih perlu disiapkan.</p>
         `;
       } else if (type === 'settings') {
         document.getElementById('modalHeaderTitle').innerText = 'Pengaturan Aplikasi';
@@ -1907,7 +1910,70 @@
     }
   </script>
 
+<!-- Firebase Cloud Messaging: browser-side registration -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+  import { getMessaging, getToken, onMessage, isSupported } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-messaging.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBVAeKmaXqh4tPwZ-7yjKuikxYO6dfvy20",
+    authDomain: "teman-sekolah-9ab7f.firebaseapp.com",
+    projectId: "teman-sekolah-9ab7f",
+    storageBucket: "teman-sekolah-9ab7f.firebasestorage.app",
+    messagingSenderId: "670336660572",
+    appId: "1:670336660572:web:94d305a14c7f54922d6299",
+    measurementId: "G-DN8K9N5BJ6"
+  };
+  const VAPID_PUBLIC_KEY = "BEv98JH1TdfY4eUZZWxWhQD4YCbZAzlGEcxmE-ZIAUTt93IijUBNFSALDp_FGG9tazBh_ElmC4yDkKX6NZGJZHU";
+  const firebaseApp = initializeApp(firebaseConfig);
+  let messagingInstance = null;
+
+  window.enableTemanSekolahPush = async function () {
+    const status = document.getElementById('pushStatus');
+    const button = document.getElementById('enablePushButton');
+    if (!status || !button) return;
+    button.disabled = true;
+    button.textContent = 'Mengaktifkan...';
+    try {
+      if (!(await isSupported())) throw new Error('Browser ini belum mendukung Firebase Web Push. Gunakan Chrome Android versi terbaru.');
+      if (!('serviceWorker' in navigator) || !('Notification' in window)) throw new Error('Browser tidak mendukung Service Worker atau notifikasi.');
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') throw new Error('Izin notifikasi belum diberikan. Ubah izin situs menjadi Izinkan di pengaturan Chrome.');
+      const registration = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './push/' });
+      await navigator.serviceWorker.ready;
+      messagingInstance = getMessaging(firebaseApp);
+      const token = await getToken(messagingInstance, { vapidKey: VAPID_PUBLIC_KEY, serviceWorkerRegistration: registration });
+      if (!token) throw new Error('Token perangkat belum berhasil dibuat. Coba muat ulang halaman.');
+      localStorage.setItem('teman_sekolah_fcm_token', token);
+      localStorage.setItem('teman_sekolah_fcm_registered', 'yes');
+      status.textContent = 'Izin aktif dan perangkat berhasil didaftarkan. Pengiriman otomatis menunggu server pengirim.';
+      button.textContent = 'Notifikasi Diizinkan ✓';
+      button.classList.remove('from-purple-600', 'to-cyan-500');
+      button.classList.add('bg-emerald-600');
+    } catch (error) {
+      console.error('FCM setup:', error);
+      status.textContent = error.message || 'Gagal mengaktifkan notifikasi.';
+      button.disabled = false;
+      button.textContent = 'Coba Aktifkan Lagi';
+    }
+  };
+
+  if (await isSupported()) {
+    messagingInstance = getMessaging(firebaseApp);
+    onMessage(messagingInstance, payload => {
+      const title = payload.notification?.title || 'Teman Sekolah';
+      const body = payload.notification?.body || 'Ada pengingat baru untukmu.';
+      if (Notification.permission === 'granted') {
+        new Notification(title, { body, icon: './icon-192.png' });
+      }
+    });
+  }
+</script>
+</body>
+</html>
+
 <script>
+// Keep the app's existing offline/PWA worker registration separate from the FCM worker.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./service-worker.js")
@@ -1915,5 +1981,3 @@ if ("serviceWorker" in navigator) {
   });
 }
 </script>
-</body>
-</html>
